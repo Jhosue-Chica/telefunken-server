@@ -159,11 +159,12 @@ pm2 restart telefunken
 ```
 
 # Si usas Git
+```bash
 git pull
 npm install
 pm2 restart server
-# Si transfieriste archivos manualmente
-# Repite el proceso scp
+```
+
 
 ## 7. Notas de Seguridad
 
