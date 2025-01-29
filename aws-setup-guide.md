@@ -158,6 +158,13 @@ scp -i "telefunken-key.pem" -r D:\Angular\Avanzada\telefunken-server\* ec2-user@
 pm2 restart telefunken
 ```
 
+# Si usas Git
+git pull
+npm install
+pm2 restart server
+# Si transfieriste archivos manualmente
+# Repite el proceso scp
+
 ## 7. Notas de Seguridad
 
 ### 7.1 Archivo serviceAccountKey.json
