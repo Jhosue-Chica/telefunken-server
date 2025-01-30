@@ -1,6 +1,6 @@
 # Telefunken Game Server
 
-Servidor backend para el juego Telefunken, desarrollado con Node.js, Express y Firebase. Este servidor gestiona las mesas de juego, jugadores y registro de partidas.
+Servidor backend para el juego Telefunken, desarrollado con Node.js, Express y Firebase. Este servidor gestiona las mesas de juego, partidas y registro de victorias.
 
 ## Estructura del Proyecto
 
@@ -10,11 +10,11 @@ telefunken-server/
 │   └── firebase.js          # Configuración de Firebase
 ├── routes/
 │   ├── mesaRoutes.js        # Rutas para mesas de juego
-│   ├── playerRoutes.js      # Rutas para jugadores
+│   ├── partidaRoutes.js     # Rutas para partidas
 │   └── winsRoutes.js        # Rutas para registro de victorias
 ├── controllers/
 │   ├── mesaController.js    # Controlador de mesas
-│   ├── playerController.js  # Controlador de jugadores
+│   ├── partidaController.js # Controlador de partidas
 │   └── winsController.js    # Controlador de victorias
 ├── .env                     # Variables de entorno
 ├── server.js               # Punto de entrada de la aplicación
@@ -70,29 +70,62 @@ npm start
 ### Mesas
 - `GET /api/mesas` - Obtener todas las mesas
 - `POST /api/mesas` - Crear nueva mesa
+- `PATCH /api/mesas/:id/estado` - Actualizar estado de la mesa
 ```json
+// POST /api/mesas
 {
   "cant_jugadores": 4,
   "cant_barajas": 2,
   "cod_sala": "SALA123"
 }
+
+// PATCH /api/mesas/:id/estado
+{
+  "estado": "en_juego"
+}
 ```
 
-### Jugadores
-- `POST /api/players` - Registrar nuevo jugador
+### Partidas
+- `GET /api/partidas` - Obtener todas las partidas
+- `GET /api/partidas/:id` - Obtener una partida específica
+- `POST /api/partidas` - Crear nueva partida
+- `PATCH /api/partidas/:id/ronda` - Actualizar ronda de una partida
 ```json
+// POST /api/partidas
 {
-  "nombre": "Jugador1"
+  "id_mesa": "ID_MESA",
+  "jugadores": [
+    {
+      "id": "jugador1",
+      "nombre": "Juan"
+    },
+    {
+      "id": "jugador2",
+      "nombre": "María"
+    }
+  ]
+}
+
+// PATCH /api/partidas/:id/ronda
+{
+  "jugador_id": "jugador1",
+  "ronda": "1/3",
+  "valores": ["30", "40", "25", "35"],
+  "puntuacion": 130
 }
 ```
 
 ### Victorias
+- `GET /api/wins` - Obtener todas las victorias
 - `POST /api/wins` - Registrar victoria
 ```json
 {
-  "wins_player": "Jugador1",
-  "wins_score": 100,
-  "wins_timegame": "2024-01-28T15:00:00Z"
+  "mesa_ref": "mesas/ID_MESA",
+  "jugador": {
+    "id": "jugador1",
+    "nombre": "Juan"
+  },
+  "puntuacion": 150
 }
 ```
 
@@ -101,28 +134,53 @@ npm start
 ### Colección: mesas
 ```javascript
 {
-  idmesa: int,
-  cant_jugadores: int,
-  cant_barajas: int,
-  cod_sala: string
+  cant_jugadores: number,
+  cant_barajas: number,
+  cod_sala: string,
+  estado: string, // 'disponible' | 'en_juego'
+  jugadores: array,
+  fecha_creacion: timestamp,
+  ultima_actualizacion: timestamp
 }
 ```
 
-### Colección: players
+### Colección: partidas
 ```javascript
 {
-  id_player: int,
-  nombre: string
+  id_mesa: reference, // Referencia a documento en colección mesas
+  fecha_creacion: timestamp,
+  estado: string, // 'en_curso' | 'terminada'
+  jugadores: {
+    [jugador_id]: {
+      nombre: string,
+      puntuacion_total: number,
+      rondas: {
+        "1/3": {
+          valores: array[4],
+          puntuacion: number
+        },
+        "2/3": { ... },
+        "1/4": { ... },
+        "2/4": { ... },
+        "1/5": { ... },
+        "2/5": { ... },
+        "Escalera": { ... }
+      }
+    }
+  }
 }
 ```
 
 ### Colección: wins
 ```javascript
 {
-  id_wins: int,
-  wins_player: string,
-  wins_score: int,
-  wins_timegame: timestamp
+  mesa_ref: reference, // Referencia a documento en colección mesas
+  jugador: {
+    id: string,
+    nombre: string
+  },
+  puntuacion: number,
+  fecha: timestamp
 }
 ```
 

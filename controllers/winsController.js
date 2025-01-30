@@ -1,22 +1,21 @@
+const { FieldValue } = require('firebase-admin/firestore');
 const db = require('../config/firebase');
 
 const winsCollection = db.collection('wins');
 
 exports.createWin = async (req, res) => {
     try {
-        const { wins_player, wins_score, wins_timegame } = req.body;
-        const snapshot = await winsCollection.orderBy('id_wins', 'desc').limit(1).get();
-        const lastId = snapshot.empty ? 0 : snapshot.docs[0].data().id_wins;
+        const { mesa_ref, jugador, puntuacion } = req.body;
 
         const newWin = {
-            id_wins: lastId + 1,
-            wins_player,
-            wins_score,
-            wins_timegame: new Date(wins_timegame)
+            mesa_ref: db.doc(mesa_ref),
+            jugador,
+            puntuacion,
+            fecha: FieldValue.serverTimestamp()
         };
 
-        await winsCollection.add(newWin);
-        res.status(201).json(newWin);
+        const docRef = await winsCollection.add(newWin);
+        res.status(201).json({ id: docRef.id, ...newWin });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

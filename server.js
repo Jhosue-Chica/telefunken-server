@@ -1,11 +1,7 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-
-// Importar rutas
-const mesaRoutes = require('./routes/mesaRoutes');
-const playerRoutes = require('./routes/playerRoutes');
-const winsRoutes = require('./routes/winsRoutes');
 
 const app = express();
 
@@ -13,9 +9,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Rutas
+// Importar rutas
+const mesaRoutes = require('./routes/mesaRoutes');
+const partidaRoutes = require('./routes/partidaRoutes');
+const winsRoutes = require('./routes/winsRoutes');
+
+// Usar rutas
 app.use('/api/mesas', mesaRoutes);
-app.use('/api/players', playerRoutes);
+app.use('/api/partidas', partidaRoutes);
 app.use('/api/wins', winsRoutes);
 
 const PORT = process.env.PORT || 3000;

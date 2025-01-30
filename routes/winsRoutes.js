@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { createWin } = require('../controllers/winsController');
-const { getWins } = require('../controllers/winsController');
+const winsController = require('../controllers/winsController');
 
-router.post('/', createWin);
-router.get('/', getWins);
+router.post('/', winsController.createWin);
+router.get('/', winsController.getWins);
 
 module.exports = router;
