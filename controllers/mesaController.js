@@ -1,53 +1,130 @@
+// controllers/mesaController.js
+const { db, mesasCollection } = require('../config/firebase');
 const { FieldValue } = require('firebase-admin/firestore');
-const db = require('../config/firebase');
 
-const mesasCollection = db.collection('mesas');
-
+// Crear una nueva mesa
 exports.createMesa = async (req, res) => {
   try {
-    const { cant_jugadores, cant_barajas, cod_sala } = req.body;
+    const { cant_jugadores, cant_barajas, cod_sala, jugadorCreador } = req.body;
 
+    // Crear el objeto de la mesa
     const newMesa = {
       cant_jugadores,
       cant_barajas,
       cod_sala,
-      estado: 'disponible',
-      jugadores: [],
+      estado: 'en_espera',
       fecha_creacion: FieldValue.serverTimestamp(),
-      ultima_actualizacion: FieldValue.serverTimestamp()
+      ultima_actualizacion: FieldValue.serverTimestamp(),
+      jugadores: {
+        [jugadorCreador.id]: {
+          id: jugadorCreador.id,
+          nombre: jugadorCreador.nombre,
+          avatar: jugadorCreador.avatar
+        }
+      }
     };
 
-    const docRef = await mesasCollection.add(newMesa);
-    res.status(201).json({ id: docRef.id, ...newMesa });
+    // Guardar la mesa en Firestore
+    const mesaRef = await mesasCollection.add(newMesa);
+
+    // Devolver la respuesta con el ID de la mesa y los datos
+    res.status(201).json({
+      id: mesaRef.id,
+      ...newMesa
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
+// Obtener todas las mesas
 exports.getMesas = async (req, res) => {
   try {
     const mesasSnapshot = await mesasCollection.get();
     const mesas = [];
-    mesasSnapshot.forEach(doc => {
-      mesas.push({ id: doc.id, ...doc.data() });
+
+    mesasSnapshot.forEach((mesaDoc) => {
+      const mesaData = mesaDoc.data();
+      const mesa = {
+        id: mesaDoc.id,
+        cant_jugadores: mesaData.cant_jugadores,
+        cant_barajas: mesaData.cant_barajas,
+        cod_sala: mesaData.cod_sala,
+        estado: mesaData.estado,
+        fecha_creacion: mesaData.fecha_creacion,
+        ultima_actualizacion: mesaData.ultima_actualizacion,
+        jugadores: mesaData.jugadores
+      };
+      mesas.push(mesa);
     });
-    res.json(mesas);
+
+    res.status(200).json(mesas);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-exports.updateMesaEstado = async (req, res) => {
+// Obtener una mesa por ID
+exports.getMesaById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { estado } = req.body;
+    
+    // Obtener la referencia de la mesa
+    const mesaRef = mesasCollection.doc(id);
+    const mesaDoc = await mesaRef.get();
 
-    await mesasCollection.doc(id).update({
-      estado,
+    // Verificar si la mesa existe
+    if (!mesaDoc.exists) {
+      return res.status(404).json({ error: 'Mesa no encontrada' });
+    }
+
+    // Obtener los datos de la mesa
+    const mesaData = mesaDoc.data();
+    const mesa = {
+      id: mesaDoc.id,
+      cant_jugadores: mesaData.cant_jugadores,
+      cant_barajas: mesaData.cant_barajas,
+      cod_sala: mesaData.cod_sala,
+      estado: mesaData.estado,
+      fecha_creacion: mesaData.fecha_creacion,
+      ultima_actualizacion: mesaData.ultima_actualizacion,
+      jugadores: mesaData.jugadores
+    };
+
+    res.status(200).json(mesa);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Actualizar una mesa
+exports.updateMesa = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    // Verificar si la mesa existe
+    const mesaRef = mesasCollection.doc(id);
+    const mesaDoc = await mesaRef.get();
+
+    if (!mesaDoc.exists) {
+      return res.status(404).json({ error: 'Mesa no encontrada' });
+    }
+
+    // Actualizar los campos proporcionados
+    await mesaRef.update({
+      ...updateData,
       ultima_actualizacion: FieldValue.serverTimestamp()
     });
 
-    res.json({ message: 'Estado actualizado correctamente' });
+    // Obtener los datos actualizados de la mesa
+    const updatedMesaDoc = await mesaRef.get();
+    const updatedMesa = {
+      id: updatedMesaDoc.id,
+      ...updatedMesaDoc.data()
+    };
+
+    res.status(200).json(updatedMesa);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

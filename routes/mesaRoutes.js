@@ -4,6 +4,7 @@ const mesaController = require('../controllers/mesaController');
 
 router.post('/', mesaController.createMesa);
 router.get('/', mesaController.getMesas);
-router.patch('/:id/estado', mesaController.updateMesaEstado);
+router.get('/:id', mesaController.getMesaById);
+router.put('/:id', mesaController.updateMesa);
 
 module.exports = router;

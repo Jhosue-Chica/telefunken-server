@@ -1,7 +1,6 @@
+// controllers/winsController.js
+const { db, winsCollection } = require('../config/firebase');
 const { FieldValue } = require('firebase-admin/firestore');
-const db = require('../config/firebase');
-
-const winsCollection = db.collection('wins');
 
 exports.createWin = async (req, res) => {
     try {

@@ -1,7 +1,6 @@
+// controllers/partidaController.js
+const { db, partidasCollection } = require('../config/firebase');
 const { FieldValue } = require('firebase-admin/firestore');
-const db = require('../config/firebase');
-
-const partidasCollection = db.collection('partidas');
 
 exports.createPartida = async (req, res) => {
     try {
