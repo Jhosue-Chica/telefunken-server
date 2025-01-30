@@ -9,13 +9,31 @@ if (!mesasCollection) {
 }
 
 function setupWebSocketServer(server) {
-  const wss = new WebSocket.Server({ server });
+  const wss = new WebSocket.Server({ 
+    server,
+    clientTracking: true,
+    // Configuraciones avanzadas para mejorar rendimiento y estabilidad
+    perMessageDeflate: {
+      zlibDeflateOptions: {
+        chunkSize: 1024,
+        memLevel: 7,
+        level: 3
+      },
+      zlibInflateOptions: {
+        chunkSize: 10 * 1024
+      },
+      clientNoContextTakeover: true,
+      serverNoContextTakeover: true,
+      threshold: 1024
+    }
+  });
   
   // Mantener un registro de las conexiones por mesa
   const mesaConnections = new Map();
 
   wss.on('connection', async (ws, req) => {
     console.log('Nueva conexión WebSocket recibida');
+    console.log('Headers:', req.headers);
     
     try {
       // Obtener el ID de la mesa de la URL
@@ -46,6 +64,12 @@ function setupWebSocketServer(server) {
         return;
       }
       
+      // Setup heartbeat para mantener la conexión
+      ws.isAlive = true;
+      ws.on('pong', () => {
+        ws.isAlive = true;
+      });
+      
       // Agregar la conexión al registro de la mesa
       if (!mesaConnections.has(mesaId)) {
         mesaConnections.set(mesaId, new Set());
@@ -56,30 +80,23 @@ function setupWebSocketServer(server) {
       const unsubscribe = mesasCollection.doc(mesaId)
         .onSnapshot(
           doc => {
-            if (doc.exists) {
+            if (doc.exists && ws.readyState === WebSocket.OPEN) {
               const mesaData = {
                 id: doc.id,
                 ...doc.data()
               };
 
               console.log('Enviando actualización de mesa:', mesaData);
-
-              // Enviar actualización a todos los clientes conectados a esta mesa
-              const message = JSON.stringify({
-                type: 'mesa_update',
-                mesa: mesaData
-              });
-
-              mesaConnections.get(mesaId)?.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                  try {
-                    client.send(message);
-                  } catch (error) {
-                    console.error('Error al enviar mensaje a cliente:', error);
-                  }
-                }
-              });
-            } else {
+              try {
+                ws.send(JSON.stringify({
+                  type: 'mesa_update',
+                  mesa: mesaData
+                }));
+              } catch (error) {
+                console.error('Error al enviar mensaje:', error);
+                ws.close();
+              }
+            } else if (!doc.exists) {
               console.log('La mesa ya no existe:', mesaId);
               ws.close();
             }
@@ -109,11 +126,11 @@ function setupWebSocketServer(server) {
 
       ws.on('close', () => {
         console.log(`Conexión cerrada para mesa ${mesaId}`);
-        // Eliminar la conexión cuando se cierra
+        ws.isAlive = false;
         mesaConnections.get(mesaId)?.delete(ws);
         if (mesaConnections.get(mesaId)?.size === 0) {
           mesaConnections.delete(mesaId);
-          unsubscribe(); // Detener la escucha de Firestore
+          unsubscribe();
         }
       });
     } catch (error) {
@@ -122,9 +139,17 @@ function setupWebSocketServer(server) {
     }
   });
 
-  // Agregar manejo de errores al nivel del servidor WebSocket
-  wss.on('error', (error) => {
-    console.error('Error en el servidor WebSocket:', error);
+  // Ping/Pong para mantener conexiones activas
+  const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+
+  wss.on('close', () => {
+    clearInterval(interval);
   });
 
   return wss;
