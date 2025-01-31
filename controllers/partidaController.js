@@ -2,25 +2,29 @@
 const { db, partidasCollection } = require('../config/firebase');
 const { FieldValue } = require('firebase-admin/firestore');
 
+const RONDAS_ORDEN = ['1/3', '2/3', '1/4', '2/4', '1/5', '2/5', 'Escalera'];
+
 exports.createPartida = async (req, res) => {
     try {
         const { id_mesa, jugadores } = req.body;
 
-        const rondas = {
-            '1/3': { valores: ['', '', '', ''], puntuacion: 0 },
-            '2/3': { valores: ['', '', '', ''], puntuacion: 0 },
-            '1/4': { valores: ['', '', '', ''], puntuacion: 0 },
-            '2/4': { valores: ['', '', '', ''], puntuacion: 0 },
-            '1/5': { valores: ['', '', '', ''], puntuacion: 0 },
-            '2/5': { valores: ['', '', '', ''], puntuacion: 0 },
-            'Escalera': { valores: ['', '', '', ''], puntuacion: 0 }
-        };
+        // Crear estructura de rondas inicial
+        const rondas = {};
+        RONDAS_ORDEN.forEach(ronda => {
+            rondas[ronda] = {
+                valor: '', // Ahora cada ronda tiene un único valor
+                completada: false
+            };
+        });
 
+        // Inicializar datos de jugadores
         const jugadoresData = {};
-        jugadores.forEach(jugador => {
+        jugadores.forEach((jugador, index) => {
             jugadoresData[jugador.id] = {
                 nombre: jugador.nombre,
-                puntuacion_total: 0,
+                posicion: index,
+                puntuacion_total: null,
+                rondas_completadas: 0,
                 rondas: { ...rondas }
             };
         });
@@ -29,7 +33,9 @@ exports.createPartida = async (req, res) => {
             id_mesa: db.doc(`mesas/${id_mesa}`),
             fecha_creacion: FieldValue.serverTimestamp(),
             estado: 'en_curso',
-            jugadores: jugadoresData
+            num_jugadores: jugadores.length,
+            jugadores: jugadoresData,
+            ronda_actual: RONDAS_ORDEN[0]
         };
 
         const docRef = await partidasCollection.add(newPartida);
@@ -39,6 +45,80 @@ exports.createPartida = async (req, res) => {
     }
 };
 
+exports.updatePartidaRonda = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { jugador_id, ronda, valor } = req.body;
+
+        // Obtener datos actuales de la partida
+        const partidaDoc = await partidasCollection.doc(id).get();
+        const partidaData = partidaDoc.data();
+        const jugadorData = partidaData.jugadores[jugador_id];
+
+        if (!jugadorData) {
+            return res.status(404).json({ error: 'Jugador no encontrado' });
+        }
+
+        // Validar que la ronda existe
+        if (!RONDAS_ORDEN.includes(ronda)) {
+            return res.status(400).json({ error: 'Ronda no válida' });
+        }
+
+        // Actualizar el valor de la ronda para el jugador
+        const updateData = {};
+        updateData[`jugadores.${jugador_id}.rondas.${ronda}.valor`] = valor;
+
+        // Verificar si el jugador completó todas sus rondas
+        let rondasCompletadas = 0;
+        RONDAS_ORDEN.forEach(r => {
+            if (jugadorData.rondas[r].valor !== '') {
+                rondasCompletadas++;
+            }
+        });
+
+        // Si completó todas las rondas, calcular puntuación total
+        if (rondasCompletadas === RONDAS_ORDEN.length) {
+            const puntuacionTotal = RONDAS_ORDEN.reduce((total, rondaNombre) => {
+                const valorRonda = jugadorData.rondas[rondaNombre].valor;
+                return total + (parseInt(valorRonda) || 0);
+            }, 0);
+            
+            updateData[`jugadores.${jugador_id}.puntuacion_total`] = puntuacionTotal;
+            updateData[`jugadores.${jugador_id}.rondas_completadas`] = rondasCompletadas;
+        }
+
+        // Actualizar documento
+        await partidasCollection.doc(id).update(updateData);
+
+        // Verificar si todos los jugadores completaron la ronda actual
+        const todosCompletaron = Object.values(partidaData.jugadores).every(jugador => 
+            jugador.rondas[ronda].valor !== ''
+        );
+
+        if (todosCompletaron) {
+            const rondaActualIndex = RONDAS_ORDEN.indexOf(ronda);
+            if (rondaActualIndex < RONDAS_ORDEN.length - 1) {
+                // Avanzar a la siguiente ronda
+                await partidasCollection.doc(id).update({
+                    ronda_actual: RONDAS_ORDEN[rondaActualIndex + 1]
+                });
+            } else {
+                // Finalizar partida si era la última ronda
+                await partidasCollection.doc(id).update({
+                    estado: 'finalizada'
+                });
+            }
+        }
+
+        res.json({ 
+            message: 'Ronda actualizada correctamente',
+            rondas_completadas: rondasCompletadas
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+// Los métodos getPartidas y getPartidaById se mantienen igual
 exports.getPartidas = async (req, res) => {
     try {
         const partidasSnapshot = await partidasCollection.get();
@@ -62,33 +142,6 @@ exports.getPartidaById = async (req, res) => {
         }
 
         res.json({ id: partidaDoc.id, ...partidaDoc.data() });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.updatePartidaRonda = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { jugador_id, ronda, valores, puntuacion } = req.body;
-
-        const updateData = {};
-        updateData[`jugadores.${jugador_id}.rondas.${ronda}.valores`] = valores;
-        updateData[`jugadores.${jugador_id}.rondas.${ronda}.puntuacion`] = puntuacion;
-
-        await partidasCollection.doc(id).update(updateData);
-
-        // Actualizar puntuación total
-        const partidaDoc = await partidasCollection.doc(id).get();
-        const jugadorData = partidaDoc.data().jugadores[jugador_id];
-        const puntuacionTotal = Object.values(jugadorData.rondas)
-            .reduce((total, ronda) => total + (ronda.puntuacion || 0), 0);
-
-        await partidasCollection.doc(id).update({
-            [`jugadores.${jugador_id}.puntuacion_total`]: puntuacionTotal
-        });
-
-        res.json({ message: 'Ronda actualizada correctamente' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

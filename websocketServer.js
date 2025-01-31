@@ -107,19 +107,77 @@ function setupWebSocketServer(server) {
           }
         );
 
-      ws.on('message', (message) => {
-        try {
-          const data = JSON.parse(message.toString());
-          console.log('Mensaje recibido:', data);
-          
-          if (data.type === 'join_mesa') {
-            console.log(`Jugador ${data.jugador.nombre} se unió a la mesa ${data.mesaId}`);
+        ws.on('message', (message) => {
+          try {
+            const data = JSON.parse(message.toString());
+            console.log('Mensaje recibido:', data);
+      
+            if (data.type === 'join_mesa') {
+              console.log(`Jugador ${data.jugador.nombre} se unió a la mesa ${data.mesaId}`);
+            } else if (data.type === 'start_game') {
+              // Notificar a todos los jugadores de la mesa que el juego ha comenzado
+              const mesaId = data.mesaId;
+              const connections = mesaConnections.get(mesaId);
+              if (connections) {
+                connections.forEach(client => {
+                  if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({
+                      type: 'game_started',
+                      mesaId: mesaId
+                    }));
+                  }
+                });
+              } 
+            } else if (data.type === 'table_update') {
+              // Difundir la actualización de la tabla a todos los jugadores
+              const mesaId = data.mesaId;
+              const connections = mesaConnections.get(mesaId);
+              if (connections) {
+                connections.forEach(client => {
+                  if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({
+                      type: 'table_updated',
+                      rowIndex: data.rowIndex,
+                      colIndex: data.colIndex,
+                      value: data.value
+                    }));
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error al procesar mensaje:', error);
           }
-        } catch (error) {
-          console.error('Error al procesar mensaje:', error);
-        }
-      });
+        });
 
+        ws.on('message', (message) => {
+          try {
+            const data = JSON.parse(message.toString());
+            console.log('Mensaje recibido:', data);
+        
+            if (data.type === 'table_update') {
+              console.log('Difundiendo actualización de tabla:', data);
+              const mesaId = data.mesaId;
+              const connections = mesaConnections.get(mesaId);
+              if (connections) {
+                connections.forEach(client => {
+                  if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({
+                      type: 'table_updated',
+                      rowIndex: data.rowIndex,
+                      colIndex: data.colIndex,
+                      value: data.value
+                    }));
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error al procesar mensaje:', error);
+          }
+        });
+
+        
       ws.on('error', (error) => {
         console.error('Error en la conexión WebSocket:', error);
       });

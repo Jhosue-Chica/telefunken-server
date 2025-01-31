@@ -2,11 +2,12 @@
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 require('dotenv').config();
 const setupWebSocketServer = require('./websocketServer');
 
 const app = express();
-const server = http.createServer(app);
 
 // Configuración mejorada de CORS
 app.use(cors({
@@ -20,14 +21,6 @@ app.use(express.json());
 
 // Confiar en el proxy de Nginx
 app.set('trust proxy', true);
-
-// Middleware para asegurar el uso de HTTPS cuando está en producción
-app.use((req, res, next) => {
-  if (process.env.NODE_ENV === 'production' && !req.secure && req.get('x-forwarded-proto') !== 'https') {
-    return res.redirect('https://' + req.headers.host + req.url);
-  }
-  next();
-});
 
 // Ruta de prueba para verificar el servidor
 app.get('/health', (req, res) => {
@@ -48,12 +41,41 @@ app.use('/api/mesas', mesaRoutes);
 app.use('/api/partidas', partidaRoutes);
 app.use('/api/wins', winsRoutes);
 
-// Configurar el servidor WebSocket
-setupWebSocketServer(server);
+// Crear servidor HTTP
+const httpServer = http.createServer(app);
 
-// Escuchar en todas las interfaces de red
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+// Configurar el servidor WebSocket para HTTP
+setupWebSocketServer(httpServer);
+
+// Puerto para HTTP
+const HTTP_PORT = process.env.HTTP_PORT || 3000;
+httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
+  console.log(`HTTP Server running on port ${HTTP_PORT}`);
 });
+
+// Configurar HTTPS solo si los certificados existen
+try {
+  const privateKey = fs.readFileSync('/etc/nginx/ssl/private.key', 'utf8');
+  const certificate = fs.readFileSync('/etc/nginx/ssl/certificate.crt', 'utf8');
+  
+  const credentials = {
+    key: privateKey,
+    cert: certificate
+  };
+
+  // Crear servidor HTTPS
+  const httpsServer = https.createServer(credentials, app);
+  
+  // Configurar el servidor WebSocket para HTTPS
+  setupWebSocketServer(httpsServer);
+  
+  // Puerto para HTTPS
+  const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
+  httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
+    console.log(`HTTPS Server running on port ${HTTPS_PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+} catch (error) {
+  console.log('HTTPS certificates not found, running only HTTP server');
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+}

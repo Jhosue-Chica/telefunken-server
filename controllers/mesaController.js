@@ -129,3 +129,49 @@ exports.updateMesa = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Actualizar el estado de una mesa
+exports.updateMesaEstado = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { estado } = req.body;
+
+    // Validar que se proporcionó un estado
+    if (!estado) {
+      return res.status(400).json({ error: 'Se requiere el estado' });
+    }
+
+    // Validar que el estado sea válido
+    const estadosValidos = ['en_espera', 'en_curso', 'finalizada'];
+    if (!estadosValidos.includes(estado)) {
+      return res.status(400).json({ 
+        error: 'Estado no válido. Los estados permitidos son: en_espera, en_curso, finalizada' 
+      });
+    }
+
+    // Verificar si la mesa existe
+    const mesaRef = mesasCollection.doc(id);
+    const mesaDoc = await mesaRef.get();
+
+    if (!mesaDoc.exists) {
+      return res.status(404).json({ error: 'Mesa no encontrada' });
+    }
+
+    // Actualizar solo el estado y la última actualización
+    await mesaRef.update({
+      estado,
+      ultima_actualizacion: FieldValue.serverTimestamp()
+    });
+
+    // Obtener los datos actualizados de la mesa
+    const updatedMesaDoc = await mesaRef.get();
+    const updatedMesa = {
+      id: updatedMesaDoc.id,
+      ...updatedMesaDoc.data()
+    };
+
+    res.status(200).json(updatedMesa);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

@@ -132,3 +132,5 @@ dist
 # file .env
 .env
 serviceAccountKey.json
+private.key
+certificate.crt
