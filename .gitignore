@@ -134,3 +134,4 @@ dist
 serviceAccountKey.json
 private.key
 certificate.crt
+/.vscode
